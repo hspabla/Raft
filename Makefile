@@ -1,6 +1,6 @@
 CXX = g++
-CPPFLAGS = -g -fpermissive -Wall -I. -I/usr/local/include/thrift -Igen-cpp
-LDFLAGS = -lthrift -lpthread
+CPPFLAGS = -g -fpermissive -Wall -I. -I${HOME}/project/include -I${HOME}/project/include/thrift -Igen-cpp
+LDFLAGS = -L${HOME}/project/lib -lthrift -lpthread
 LD = g++
 
 PROGRAMS = server
