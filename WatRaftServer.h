@@ -14,15 +14,15 @@ class WatRaftServer {
   public:
     WatRaftServer(int node_id, const WatRaftConfig* config) throw (int);
     ~WatRaftServer();
-  
+
     // Block and wait until the server shutdowns.
     int wait();
     // Set the RPC server once it is created in a child thread.
     void set_rpc_server(apache::thrift::server::TThreadedServer* server);
-    int get_id() { return node_id; } 
-  
+    int get_id() { return node_id; }
+
   private:
-    int node_id;     
+    int node_id;
     apache::thrift::server::TThreadedServer* rpc_server;
     const WatRaftConfig* config;
     pthread_t rpc_thread;

@@ -4,17 +4,17 @@ enum WatRaftErrorType {
   KEY_NOT_FOUND,              // Key not found.
   NOT_LEADER,                 // Node is not the leader.
   LEADER_NOT_AVAILABLE        // Leader is not available. An election is
-                              // currently in progress. I suggest that, for 
-                              // simplicity, a node only returns this error if 
-                              // it is a candidate (not a follower) and has 
+                              // currently in progress. I suggest that, for
+                              // simplicity, a node only returns this error if
+                              // it is a candidate (not a follower) and has
                               // evidence that the leader is not available.
 }
 
 exception WatRaftException {
   1: WatRaftErrorType error_code,
   2: string error_message,
-  3: optional i32 node_id     // Specify the leader node ID if the error is 
-                              // NOT_LEADER. This will allow the caller to 
+  3: optional i32 node_id     // Specify the leader node ID if the error is
+                              // NOT_LEADER. This will allow the caller to
                               // re-issue its request to the leader.
 }
 
@@ -42,14 +42,14 @@ service WatRaft {
   // if the key does not exist or the node is not the leader.
   string get(1: string key) throws (1: WatRaftException err),
 
-  // Add/update a key/value pair. Throws an error is the node is not the 
+  // Add/update a key/value pair. Throws an error is the node is not the
   // leader.
   void put(1: string key, 2: string val) throws (1: WatRaftException err),
 
   // See Figure 2 in the Raft paper for a detailed description of the
   // following functions.
-  AEResult append_entries(1: i32 term, 
-                          2: i32 leader_id, 
+  AEResult append_entries(1: i32 term,
+                          2: i32 leader_id,
                           3: i32 prev_log_index,
                           4: i32 prev_log_term,
                           5: list<Entry> entries,
