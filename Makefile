@@ -5,11 +5,11 @@ LD = g++
 
 PROGRAMS = server
 
-OBJECTS = WatRaftServer.o WatRaftHandler.o WatRaftState.o WatRaftConfig.o\
+OBJECTS = WatRaftServer.o WatRaftHandler.o WatRaftState.o WatRaftConfig.o WatRaftStorage.o\
 	gen-cpp/WatRaft_constants.o gen-cpp/WatRaft.o gen-cpp/WatRaft_types.o
 
-INCFILES = WatRaftHandler.h WatRaftServer.h WatRaftState.h WatRaftConfig.h\
-	gen-cpp/WatRaft_constants.h gen-cpp/WatRaft.h gen-cpp/WatRaft_types.h
+INCFILES = WatRaftHandler.h WatRaftServer.h WatRaftState.h WatRaftStorage.h \
+					 WatRaftConfig.h gen-cpp/WatRaft_constants.h gen-cpp/WatRaft.h gen-cpp/WatRaft_types.h
 
 all: $(PROGRAMS) $(OBJECTS) $(INCFILES)
 
@@ -17,4 +17,4 @@ server: $(OBJECTS)
 	$(LD) $^ $(LDFLAGS) -o $@
 
 clean:
-	rm -f *.o $(PROGRAMS) *~
+	rm -f *.o $(PROGRAMS) *~ LogServer* StateServer*

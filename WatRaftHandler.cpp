@@ -17,8 +17,7 @@ void WatRaftHandler::get(std::string& _return, const std::string& key) {
     printf("get\n");
 }
 
-void WatRaftHandler::put(const int& term, const std::string& key,
-                                          const std::string& val) {
+void WatRaftHandler::put(const std::string& key, const std::string& val) {
     // Your implementation goes here
     printf("put\n");
 }

@@ -23,16 +23,18 @@ using boost::shared_ptr;
 
 namespace WatRaft {
 
-WatRaftServer::WatRaftServer(int node_id, const WatRaftConfig* config)
-        throw (int) : node_id(node_id), rpc_server(NULL), config(config) {
+WatRaftServer::WatRaftServer(int node_id, const WatRaftConfig* config) throw (int) :
+                                node_id(node_id), rpc_server(NULL), config(config) {
     int rc = pthread_create(&rpc_thread, NULL, start_rpc_server, this);
     if (rc != 0) {
         throw rc; // Just throw the error code
     }
+    serverStaticData = new WatRaftStorage( node_id );
 }
 
 WatRaftServer::~WatRaftServer() {
     printf("In destructor of WatRaftServer\n");
+    delete serverStaticData;
     delete rpc_server;
 }
 
@@ -57,13 +59,17 @@ int WatRaftServer::wait() {
             client.debug_echo(remote_str, "Hello");
             transport->close();
             // Create a WatID object from the return value.
-            std::cout << "Received: " << remote_str 
-                      << " from " << (it->second).ip 
+            std::cout << "Received: " << remote_str
+                      << " from " << (it->second).ip
                       << ":" << (it->second).port << std::endl;
         } catch (TTransportException e) {
             printf("Caught exception: %s\n", e.what());
         }
-
+        std::cout << "Server " << node_id << std::endl
+                  << "Current Term " << serverStaticData->getState(1)->currentTerm
+                  << std::endl
+                  << "Voted For " << serverStaticData->getState(1)->votedFor
+                  << std::endl;
     }
     pthread_join(rpc_thread, NULL);
     return 0;
@@ -77,18 +83,18 @@ void WatRaftServer::set_rpc_server(TThreadedServer* server) {
 void* WatRaftServer::start_rpc_server(void* param) {
     WatRaftServer* raft = static_cast<WatRaftServer*>(param);
     shared_ptr<WatRaftHandler> handler(new WatRaftHandler(raft));
-    shared_ptr<TProcessor> processor(new WatRaftProcessor(handler)); 
+    shared_ptr<TProcessor> processor(new WatRaftProcessor(handler));
     // Get IP/port for this node
-    IPPortPair this_node = 
+    IPPortPair this_node =
         raft->config->get_servers()->find(raft->node_id)->second;
     shared_ptr<TServerTransport> serverTransport(
         new TServerSocket(this_node.ip, this_node.port));
     shared_ptr<TTransportFactory> transportFactory(
         new TBufferedTransportFactory());
     shared_ptr<TProtocolFactory> protocolFactory(new TBinaryProtocolFactory());
-    shared_ptr<ThreadManager> threadManager = 
+    shared_ptr<ThreadManager> threadManager =
         ThreadManager::newSimpleThreadManager(num_rpc_threads, 0);
-    shared_ptr<PosixThreadFactory> threadFactory = 
+    shared_ptr<PosixThreadFactory> threadFactory =
         shared_ptr<PosixThreadFactory>(new PosixThreadFactory());
     threadManager->threadFactory(threadFactory);
     threadManager->start();
@@ -98,6 +104,7 @@ void* WatRaftServer::start_rpc_server(void* param) {
     server->serve();
     return NULL;
 }
+
 } // namespace WatRaft
 
 using namespace WatRaft;

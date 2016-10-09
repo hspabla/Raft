@@ -16,7 +16,7 @@ class WatRaftHandler : virtual public WatRaftIf {
     virtual ~WatRaftHandler();
 
     void get(std::string& _return, const std::string& key);
-    void put(const int& term, const std::string& key, const std::string& val);
+    void put(const std::string& key, const std::string& val);
     void append_entries(AEResult& _return,
                         const int32_t term,
                         const int32_t leader_id,

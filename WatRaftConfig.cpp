@@ -18,8 +18,8 @@ bool WatRaftConfig::parse(const string& filename) {
         ss >> node_id >> pair.ip >> pair.port;
         if (ss) {
             cout << "Node ID: " << node_id
-                 << " IP: "     << pair.ip 
-                 << " Port: "   << pair.port << endl; 
+                 << " IP: "     << pair.ip
+                 << " Port: "   << pair.port << endl;
             servers[node_id] = pair;
         } else {
             cerr << "Error parsing: " << line << std::endl;

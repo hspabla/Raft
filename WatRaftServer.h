@@ -3,8 +3,10 @@
 
 #include "WatRaft.h"
 #include "WatRaftState.h"
+#include "WatRaftStorage.h"
 #include <pthread.h>
 #include <string>
+#include <vector>
 #include <thrift/server/TThreadedServer.h>
 
 namespace WatRaft {
@@ -21,6 +23,7 @@ class WatRaftServer {
     void set_rpc_server(apache::thrift::server::TThreadedServer* server);
     int get_id() { return node_id; }
 
+
   private:
     int node_id;
     apache::thrift::server::TThreadedServer* rpc_server;
@@ -29,6 +32,20 @@ class WatRaftServer {
     WatRaftState wat_state;   // Tracks the current state of the node.
     static const int num_rpc_threads = 64;
     static void* start_rpc_server(void* param);
+
+    // Raft data
+
+    // Persistent state
+    WatRaftStorage* serverStaticData;
+
+    // Volatile state
+    int commitIndex;
+    int lastApplied;
+
+    // Only for leader
+    std::vector<int> nextIndex;
+    std::vector<int> matchIndex;
+
 };
 } // namespace WatRaft
 
