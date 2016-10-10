@@ -9,10 +9,12 @@
 #include <string>
 #include <thrift/server/TThreadedServer.h>
 #include <vector>
+#include <sys/time.h>
 
 namespace WatRaft {
 
 extern int ELECTION_TIMEOUT;
+extern int MAJORITY;
 
 class WatRaftConfig; // Forward declaration
 class WatRaftServer {
@@ -52,9 +54,20 @@ class WatRaftServer {
 
     // timer
     std::clock_t tick;
+    struct timeval start, current;
 
+    // index of log entry immediately preceding new ones
     int getPrevLogIndex();
+
+    // term of prevLogIndex
     int getPrevLogTerm();
+
+    // index of last log entry
+    int getLastLogIndex();
+
+    // term of last log entry
+    int getLastLogTerm();
+
     void sendKeepalives();
     AEResult sendAppendEntries(int term,
                                int node_id,
@@ -64,6 +77,14 @@ class WatRaftServer {
                                int leaderCommit,
                                std::string serverIp,
                                int serverPort);
+    void leaderElection();
+    RVResult sendRequestVote( int term,
+                              int candidate_id,
+                              int last_log_index,
+                              int last_log_term,
+                              std::string serverIp,
+                              int serverPort );
+
 };
 } // namespace WatRaft
 

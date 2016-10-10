@@ -32,7 +32,7 @@ class WatRaftStorage {
     struct ServerData* getData(bool fromDisk=0);
 
     void updateLog(Entry* entry);
-    void updateState(struct ServerData* state);
+    void updateData(struct ServerData* state);
 };
 }
 

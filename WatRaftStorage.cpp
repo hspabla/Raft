@@ -15,7 +15,7 @@ WatRaftStorage::WatRaftStorage(int nodeId) {
     struct ServerData initState;
     initState.currentTerm = 0;
     initState.votedFor = 0;
-    updateState(&initState);
+    updateData(&initState);
 
     Entry initEntry;
     initEntry.term = 0;
@@ -77,7 +77,7 @@ struct ServerData* WatRaftStorage::getData(bool fromDisk) {
 }
 
 
-void WatRaftStorage::updateState(struct ServerData* state) {
+void WatRaftStorage::updateData(struct ServerData* state) {
     // updating persistent storage
     fstream fs;
     fs.open(stateFile.c_str(), fstream::out|ios::binary);
