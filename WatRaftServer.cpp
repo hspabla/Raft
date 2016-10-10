@@ -34,7 +34,6 @@ WatRaftServer::WatRaftServer( int node_id, const WatRaftConfig* config ) throw (
     }
     serverStaticData = new WatRaftStorage( node_id );
     log = serverStaticData->getLog();
-    tick = clock();
     gettimeofday( &start, NULL );
 
     commitIndex = 0;
@@ -91,9 +90,15 @@ void WatRaftServer::leaderElection() {
     // reset election timer
     gettimeofday( &start, NULL );
 
-    int last_log_index = getLastLogIndex();
-    int last_log_term = getLastLogTerm();
-    int replyTerm;
+    // add getLastLogIndex and getLastLogTerm methods
+    int last_log_index = 0;
+    int last_log_term = 0;
+
+    // update our term and voted for state
+    struct ServerData updatedState;
+    updatedState.currentTerm = term;
+    updatedState.votedFor = votedFor;
+    serverStaticData->updateData( &updatedState );
 
     // Send RFV message
     ServerMap::const_iterator it = config->get_servers()->begin();
@@ -127,17 +132,11 @@ void WatRaftServer::leaderElection() {
                                     ( it->second ).port );
       if ( voteResult.vote_granted ) {
         quorum += 1;
-        replyTerm = voteResult.term;
       }
     }
-    if ( quorum > MAJORITY ) {
-      // Maybe do this atomically
-      struct ServerData updatedState;
-      updatedState.currentTerm = replyTerm;
-      updatedState.votedFor = votedFor;
-      serverStaticData->updateData( &updatedState );
-
+    if ( quorum >= MAJORITY ) {
       wat_state.change_state( WatRaftState::LEADER );
+      sendKeepalives();
     }
     return;
 }
@@ -183,11 +182,13 @@ void WatRaftServer::sendKeepalives( ) {
       std::vector<Entry> nullEntry;
       helloResult = sendAppendEntries( myTerm, node_id, 0, 0, nullEntry, commitIndex,
                                       ( it->second ).ip, (it->second).port);
+
       if ( helloResult.term > myTerm ) {
         wat_state.change_state( WatRaftState::FOLLOWER );
-        //break;
+        break;
       }
-      std::cout << "Other guys term " << helloResult.term << std::endl;
+      std::cout << "Sending keepalive from " << node_id
+                << " to " << it->first << std::endl;
     }
 }
 
@@ -195,11 +196,14 @@ int WatRaftServer::wait() {
     wat_state.wait_ge( WatRaftState::SERVER_CREATED );
     while ( true ) {
       sleep( 1 );
+
       gettimeofday( &current, NULL );
       double elapsedTime = ( current.tv_sec - start.tv_sec );
-      if ( elapsedTime  > (double )ELECTION_TIMEOUT ) {
+      if ( ( wat_state.get_state() != WatRaftState::LEADER ) &&
+           ( elapsedTime  > (double )ELECTION_TIMEOUT ) ) {
         leaderElection();
       }
+
       if ( wat_state.get_state() == WatRaftState::LEADER ) {
         sendKeepalives();
       }
@@ -220,9 +224,9 @@ void* WatRaftServer::start_rpc_server( void* param ) {
     // Get IP/port for this node
     IPPortPair this_node =
         raft->config->get_servers()->find(raft->node_id)->second;
-    shared_ptr<TServerTransport> serverTransport( 
+    shared_ptr<TServerTransport> serverTransport(
         new TServerSocket( this_node.ip, this_node.port ));
-    shared_ptr<TTransportFactory> transportFactory( 
+    shared_ptr<TTransportFactory> transportFactory(
         new TBufferedTransportFactory());
     shared_ptr<TProtocolFactory> protocolFactory( new TBinaryProtocolFactory());
     shared_ptr<ThreadManager> threadManager =
@@ -231,7 +235,7 @@ void* WatRaftServer::start_rpc_server( void* param ) {
         shared_ptr<PosixThreadFactory>( new PosixThreadFactory());
     threadManager->threadFactory( threadFactory );
     threadManager->start();
-    TThreadedServer* server = new TThreadedServer( 
+    TThreadedServer* server = new TThreadedServer(
         processor, serverTransport, transportFactory, protocolFactory );
     raft->set_rpc_server( server );
     server->serve();

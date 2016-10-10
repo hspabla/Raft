@@ -32,12 +32,16 @@ class WatRaftServer {
     WatRaftStorage* serverStaticData;
     std::vector<Entry>* log;
 
+    // timer
+    struct timeval start, current;
+
+    WatRaftState wat_state;   // Tracks the current state of the node.
+
   private:
     int node_id;
     apache::thrift::server::TThreadedServer* rpc_server;
     const WatRaftConfig* config;
     pthread_t rpc_thread;
-    WatRaftState wat_state;   // Tracks the current state of the node.
     static const int num_rpc_threads = 64;
     static void* start_rpc_server(void* param);
 
@@ -51,10 +55,6 @@ class WatRaftServer {
     // Only for leader
     std::vector<int> nextIndex;
     std::vector<int> matchIndex;
-
-    // timer
-    std::clock_t tick;
-    struct timeval start, current;
 
     // index of log entry immediately preceding new ones
     int getPrevLogIndex();
