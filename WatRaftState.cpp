@@ -23,7 +23,7 @@ void WatRaftState::wait_e(State state) {
     pthread_mutex_lock(&wait_on_state);
     while (raft_state != state) {
         pthread_cond_wait(&state_change, &wait_on_state);
-    } 
+    }
     pthread_mutex_unlock(&wait_on_state);
 }
 

@@ -23,6 +23,8 @@ using boost::shared_ptr;
 
 namespace WatRaft {
 
+int ELECTION_TIMEOUT = 100;
+
 WatRaftServer::WatRaftServer(int node_id, const WatRaftConfig* config) throw (int) :
                                 node_id(node_id), rpc_server(NULL), config(config) {
     int rc = pthread_create(&rpc_thread, NULL, start_rpc_server, this);
@@ -30,46 +32,87 @@ WatRaftServer::WatRaftServer(int node_id, const WatRaftConfig* config) throw (in
         throw rc; // Just throw the error code
     }
     serverStaticData = new WatRaftStorage( node_id );
+    log = serverStaticData->getLog();
+    tick = clock();
+
+    commitIndex = 0;
+    lastApplied = 0;
 }
 
 WatRaftServer::~WatRaftServer() {
     printf("In destructor of WatRaftServer\n");
     delete serverStaticData;
+    delete log;
     delete rpc_server;
+}
+
+AEResult WatRaftServer::sendAppendEntries(int term,
+                                          int node_id,
+                                          int prevLogIndex,
+                                          int prevLogTerm,
+                                          std::vector<Entry>& entries,
+                                          int leaderCommit,
+                                          std::string serverIp,
+                                          int serverPort) {
+
+    boost::shared_ptr<TSocket> socket(new TSocket(serverIp, serverPort));
+    boost::shared_ptr<TTransport> transport(new TBufferedTransport(socket));
+    boost::shared_ptr<TProtocol> protocol(new TBinaryProtocol(transport));
+    WatRaftClient client(protocol);
+    AEResult result;
+    try {
+      transport->open();
+      client.append_entries(result, term,
+                                    node_id,
+                                    prevLogIndex,
+                                    prevLogTerm,
+                                    entries,
+                                    leaderCommit);
+      transport->close();
+      }
+    catch (TTransportException e) {
+      printf("Caught exception: %s\n", e.what());
+    }
+    return result;
+}
+
+void WatRaftServer::sendKeepalives() {
+    ServerMap::const_iterator it = config->get_servers()->begin();
+    for (; it != config->get_servers()->end(); it++) {
+      if (it->first == node_id) {
+        continue; // Skip itself
+      }
+      AEResult helloResult;
+      int myTerm = serverStaticData->getData()->currentTerm;
+      std::vector<Entry> nullEntry;
+      helloResult = sendAppendEntries(myTerm, node_id, 0, 0, nullEntry, commitIndex,
+                                      (it->second).ip, (it->second).port);
+      if (helloResult.term > myTerm) {
+        wat_state.change_state(WatRaftState::FOLLOWER);
+        //break;
+      }
+      std::cout << "Other guys term " << helloResult.term << std::endl;
+    }
 }
 
 int WatRaftServer::wait() {
     wat_state.wait_ge(WatRaftState::SERVER_CREATED);
     // Perhaps perform your periodic tasks in this thread.
-    ServerMap::const_iterator it = config->get_servers()->begin();
-    for (; it != config->get_servers()->end(); it++) {
-        if (it->first == node_id) {
-            continue; // Skip itself
-        }
-        sleep(5); // Sleep
-        // The following is an example of sending an echo message.
-        boost::shared_ptr<TSocket> socket(
-            new TSocket((it->second).ip, (it->second).port));
-        boost::shared_ptr<TTransport> transport(new TBufferedTransport(socket));
-        boost::shared_ptr<TProtocol> protocol(new TBinaryProtocol(transport));
-        WatRaftClient client(protocol);
-        try {
-            transport->open();
-            std::string remote_str;
-            client.debug_echo(remote_str, "Hello");
-            transport->close();
-            // Create a WatID object from the return value.
-            std::cout << "Received: " << remote_str
-                      << " from " << (it->second).ip
-                      << ":" << (it->second).port << std::endl;
-        } catch (TTransportException e) {
-            printf("Caught exception: %s\n", e.what());
-        }
-        std::cout << "Server " << node_id << std::endl
-                  << "Current Term " << serverStaticData->getState(1)->currentTerm
-                  << std::endl
-                  << "Voted For " << serverStaticData->getState(1)->votedFor
-                  << std::endl;
+    //
+    while (true) {
+      // Timer stuff
+      sleep(1);
+      if ( (clock() - tick) > ELECTION_TIMEOUT ) {
+        // if we are not leader and election timeout happened
+        // start election
+      }
+      // If Leader, send keepalive message to all servers
+      if ( wat_state.get_state() == WatRaftState::LEADER ) {
+        // Send hello periodically to every other server
+      }
+      if ( node_id == 1 ) {
+        sendKeepalives();
+      }
     }
     pthread_join(rpc_thread, NULL);
     return 0;

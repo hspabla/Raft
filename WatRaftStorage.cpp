@@ -21,37 +21,45 @@ WatRaftStorage::WatRaftStorage(int nodeId) {
     initEntry.term = 0;
     initEntry.key = "Key";
     initEntry.val = "Value";
-    updateLog(initEntry);
+    updateLog(&initEntry);
 
 }
 
 
-vector<Entry>* WatRaftStorage::getLog() {
-    fstream fs;
-    fs.open(logFile.c_str(), fstream::in|ios::binary);
-    vector<Entry>* pLog;
-    pLog = &log;
-    if (!fs) {
-      return NULL;
-
-    } else {
-        string line;
-        while (getline(fs, line)) {
-          stringstream ss(line);
-          struct Entry entry;
-          ss >> entry.term >> entry.key >> entry.val;
-          if (ss) {
-            pLog->push_back(entry);
-          } else {
-            cerr << "Error parsing: " << line << endl;
+std::vector<Entry>* WatRaftStorage::getLog(bool fromDisk) {
+    if (fromDisk) {
+      fstream fs;
+      fs.open(logFile.c_str(), fstream::in|ios::binary);
+      vector<Entry> readLog;
+      if (!fs) {
+        return NULL;
+      } else {
+          while (!fs.eof()) {
+            Entry entry;
+            fs.read( reinterpret_cast<char *>(&entry), sizeof(Entry));
+            readLog.push_back(entry);
           }
         }
-      }
-    fs.close();
-    return pLog;
+      fs.close();
+      log = readLog;
+    }
+    return &log;
 }
 
-struct ServerData* WatRaftStorage::getState(bool fromDisk) {
+void WatRaftStorage::updateLog(Entry* entry) {
+    fstream fs;
+    fs.open(logFile.c_str(), fstream::out|ios::binary|fstream::app);
+    if (!fs) {
+      cerr << "Error opening file" << logFile << endl;
+    } else {
+      fs.write(reinterpret_cast<char *>(entry), sizeof(Entry));
+    }
+    fs.close();
+    // updating in-memory state info
+    log.push_back(*entry);
+}
+
+struct ServerData* WatRaftStorage::getData(bool fromDisk) {
     if (fromDisk) {
       struct ServerData state;
       fstream fs;
@@ -86,13 +94,4 @@ void WatRaftStorage::updateState(struct ServerData* state) {
 }
 
 
-void WatRaftStorage::updateLog(Entry entry) {
-    fstream fs;
-    fs.open(logFile.c_str(), fstream::out|fstream::app);
-    if (!fs) {
-      cerr << "Error opening file" << logFile << endl;
-    } else {
-      fs << entry.term << entry.key << entry.val << '\n';
-    }
-}
 }

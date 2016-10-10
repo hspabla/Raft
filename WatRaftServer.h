@@ -4,12 +4,15 @@
 #include "WatRaft.h"
 #include "WatRaftState.h"
 #include "WatRaftStorage.h"
+#include <ctime>
 #include <pthread.h>
 #include <string>
-#include <vector>
 #include <thrift/server/TThreadedServer.h>
+#include <vector>
 
 namespace WatRaft {
+
+extern int ELECTION_TIMEOUT;
 
 class WatRaftConfig; // Forward declaration
 class WatRaftServer {
@@ -23,6 +26,9 @@ class WatRaftServer {
     void set_rpc_server(apache::thrift::server::TThreadedServer* server);
     int get_id() { return node_id; }
 
+    // Persistent state
+    WatRaftStorage* serverStaticData;
+    std::vector<Entry>* log;
 
   private:
     int node_id;
@@ -35,8 +41,6 @@ class WatRaftServer {
 
     // Raft data
 
-    // Persistent state
-    WatRaftStorage* serverStaticData;
 
     // Volatile state
     int commitIndex;
@@ -46,6 +50,20 @@ class WatRaftServer {
     std::vector<int> nextIndex;
     std::vector<int> matchIndex;
 
+    // timer
+    std::clock_t tick;
+
+    int getPrevLogIndex();
+    int getPrevLogTerm();
+    void sendKeepalives();
+    AEResult sendAppendEntries(int term,
+                               int node_id,
+                               int prevLogIndex,
+                               int prevLogTerm,
+                               std::vector<Entry>& entries,
+                               int leaderCommit,
+                               std::string serverIp,
+                               int serverPort);
 };
 } // namespace WatRaft
 

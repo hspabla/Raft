@@ -28,10 +28,10 @@ class WatRaftStorage {
     WatRaftStorage(int nodeId);
     ~WatRaftStorage() {}
 
-    std::vector<Entry>* getLog();
-    struct ServerData* getState(bool fromDisk = 0);
+    std::vector<Entry>* getLog(bool fromDisk=0);
+    struct ServerData* getData(bool fromDisk=0);
 
-    void updateLog(Entry entry);
+    void updateLog(Entry* entry);
     void updateState(struct ServerData* state);
 };
 }

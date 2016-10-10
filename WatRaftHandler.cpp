@@ -29,7 +29,10 @@ void WatRaftHandler::append_entries(AEResult& _return,
                                     const int32_t prev_log_term,
                                     const std::vector<Entry> & entries,
                                     const int32_t leader_commit_index) {
-    // Your implementation goes here
+    AEResult result;
+    result.term = server->get_id();
+    result.success = true;
+    _return = result;
     printf("append_entries\n");
 }
 

@@ -8,16 +8,17 @@ namespace WatRaft {
 class WatRaftState {
  public:
   // Add more states as needed.
-  enum State {INIT, SERVER_CREATED};
+  enum State {INIT, SERVER_CREATED, LEADER, FOLLOWER, CANDIDATE};
 
   WatRaftState();
   ~WatRaftState();
   // Change the internal state of WatRaftState.
-  void change_state(State state);  
+  void change_state(State state);
   // Wait until state equals the parameter.
   void wait_e(State state);
   // Wait until state is greater than or equal to the parameter.
   void wait_ge(State state);
+  State get_state() { return raft_state; }
 
  private:
   State raft_state;
