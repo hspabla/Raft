@@ -34,7 +34,8 @@ class WatRaftServer {
 
     // timer
     struct timeval start, current;
-
+    int randTimeout();
+    
     WatRaftState wat_state;   // Tracks the current state of the node.
 
   private:

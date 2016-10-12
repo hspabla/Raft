@@ -12,11 +12,16 @@ WatRaftStorage::WatRaftStorage(int nodeId) {
     stateFile = ss.str();
     logFile = ls.str();
 
-    struct ServerData initState;
-    initState.currentTerm = 0;
-    initState.votedFor = 0;
-    updateData(&initState);
-
+    struct ServerData* initState;
+    initState = getData(1);
+    if ( !initState ) {
+      struct ServerData init;
+      init.currentTerm = 0;
+      init.votedFor = 0;
+      updateData( &init );
+    } else {
+      updateData( initState );
+    }
     Entry initEntry;
     initEntry.term = 0;
     initEntry.key = "Key";
@@ -50,7 +55,7 @@ void WatRaftStorage::updateLog(Entry* entry) {
     fstream fs;
     fs.open(logFile.c_str(), fstream::out|ios::binary|fstream::app);
     if (!fs) {
-      cerr << "Error opening file" << logFile << endl;
+      cout << "Error opening file" << logFile << endl;
     } else {
       fs.write(reinterpret_cast<char *>(entry), sizeof(Entry));
     }
@@ -65,7 +70,6 @@ struct ServerData* WatRaftStorage::getData(bool fromDisk) {
       fstream fs;
       fs.open(stateFile.c_str(), fstream::in|ios::binary);
       if (!fs) {
-        cerr << "Error opening file " << stateFile << endl;
         return NULL;
       } else {
           fs.read(reinterpret_cast<char *>(&state), sizeof(struct ServerData));
