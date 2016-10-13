@@ -21,12 +21,7 @@ void WatRaftHandler::put(const std::string& key, const std::string& val) {
     // Your implementation goes here
     printf("put\n");
 }
-long int time() {
-    struct timeval tp;
-    gettimeofday(&tp, NULL);
-    long int ms = tp.tv_sec * 1000 + tp.tv_usec / 1000;
-    return ms;
-}
+
 void WatRaftHandler::append_entries(AEResult& _return,
                                     const int32_t term,
                                     const int32_t leader_id,
@@ -38,7 +33,6 @@ void WatRaftHandler::append_entries(AEResult& _return,
     int currentTerm = server->serverStaticData->getData()->currentTerm;
     WatRaftState::State server_state = server->wat_state.get_state();
     gettimeofday( &(server->start ), NULL );
-    static ServerData updateData;
 
     if ( server_state == WatRaftState::CANDIDATE && term >= currentTerm ) {
       server->wat_state.change_state( WatRaftState::FOLLOWER );
@@ -58,11 +52,8 @@ void WatRaftHandler::append_entries(AEResult& _return,
       result.term = currentTerm;
       result.success = false;
     }
-
-    updateData.currentTerm = result.term;
-    updateData.votedFor = server->serverStaticData->getData()->votedFor;
-    server->serverStaticData->updateData( &updateData );
-
+    server->updateServerTermVote( result.term,
+                                  server->serverStaticData->getData()->votedFor );
     _return = result;
 }
 
@@ -74,7 +65,7 @@ void WatRaftHandler::request_vote(RVResult& _return,
     RVResult result;
     int currentTerm = server->serverStaticData->getData()->currentTerm;
 
-    std::cout << time() << ": Vote request from " << candidate_id
+    std::cout << server->time1() << ": Vote request from " << candidate_id
               << " For term : " << term
               << std::endl;
 
@@ -82,29 +73,29 @@ void WatRaftHandler::request_vote(RVResult& _return,
     if ( term < currentTerm ) {
       result.term = currentTerm;
       result.vote_granted = false;
-      std::cout << time() << ": No vote, term < myTerm, my term:" << currentTerm << std::endl;
+      std::cout << server->time1() << ": No vote, vote requested for term < myTerm,\
+                                      my term: " << currentTerm << std::endl;
     }
     else if ( term == currentTerm ) {
       // if our term is same as guy asking for our vote, means we have already voted
       result.term = currentTerm;
       result.vote_granted = false;
-      std::cout << time() << ": No vote, already voted for this term, my term: " << currentTerm << std::endl;
+      std::cout << server->time1() << ": No vote, already voted for this term,\
+                                     my term: " << currentTerm << std::endl;
     }
     else {
-      std::cout << time() << ": Vote granted, my term was " << currentTerm << std::endl;
+      std::cout << server->time1() << ": Vote granted, my term was "
+                                  << currentTerm << std::endl;
       // granting vote
-      struct ServerData updatedData;
-      updatedData.currentTerm = term;
-      updatedData.votedFor = candidate_id;
-      server->serverStaticData->updateData( &updatedData );
-      std::cout << time() << ": Vote granted, my term is " << updatedData.currentTerm << std::endl;
+      server->updateServerTermVote( term, candidate_id );
+      std::cout << server->time1() << ": Updating my term to "
+                                   << term << std::endl;
       // reset our timer
       gettimeofday( &( server->start ), NULL );
 
       result.term = term;
       result.vote_granted = true;
     }
-
     _return = result;
 }
 

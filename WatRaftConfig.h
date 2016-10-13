@@ -19,8 +19,9 @@ typedef std::map<int, struct IPPortPair> ServerMap;
 class WatRaftConfig {
   private:
     ServerMap servers;
-
+    int majority;
   public:
+    const int get_majority() const { return majority; }
     WatRaftConfig() {}
     ~WatRaftConfig() {}
     bool parse(const std::string& filename);

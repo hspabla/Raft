@@ -26,6 +26,7 @@ bool WatRaftConfig::parse(const string& filename) {
         }
     }
     fs.close();
+    majority = ( servers.size() / 2 ) + 1 ;
     return true;
 }
 } // namespace WatRaft

@@ -10,33 +10,25 @@
 #include <thrift/server/TThreadedServer.h>
 #include <vector>
 #include <sys/time.h>
-
+#define DEBUG
 namespace WatRaft {
-
-extern int ELECTION_TIMEOUT;
-extern int MAJORITY;
 
 class WatRaftConfig; // Forward declaration
 class WatRaftServer {
   public:
-    WatRaftServer(int node_id, const WatRaftConfig* config) throw (int);
-    ~WatRaftServer();
-
-    // Block and wait until the server shutdowns.
-    int wait();
-    // Set the RPC server once it is created in a child thread.
-    void set_rpc_server(apache::thrift::server::TThreadedServer* server);
-    int get_id() { return node_id; }
-
-    // Persistent state
     WatRaftStorage* serverStaticData;
     std::vector<Entry>* log;
-
-    // timer
     struct timeval start, current;
-    int randTimeout();
-    
     WatRaftState wat_state;   // Tracks the current state of the node.
+
+    WatRaftServer(int node_id, const WatRaftConfig* config) throw (int);
+    ~WatRaftServer();
+    int wait();
+    void set_rpc_server(apache::thrift::server::TThreadedServer* server);
+    int get_id() { return node_id; }
+    void updateServerTermVote( int term, int votedFor );
+    long int time1();
+    void printLog( std::vector<Entry>* log );
 
   private:
     int node_id;
@@ -46,30 +38,19 @@ class WatRaftServer {
     static const int num_rpc_threads = 64;
     static void* start_rpc_server(void* param);
 
-    // Raft data
-
-
-    // Volatile state
     int commitIndex;
     int lastApplied;
-
-    // Only for leader
     std::vector<int> nextIndex;
     std::vector<int> matchIndex;
 
-    // index of log entry immediately preceding new ones
-    int getPrevLogIndex();
-
-    // term of prevLogIndex
-    int getPrevLogTerm();
-
-    // index of last log entry
-    int getLastLogIndex();
-
-    // term of last log entry
-    int getLastLogTerm();
-
+    int randTimeout();
+    bool checkElectionTimeout();
     void sendKeepalives();
+    void leaderElection();
+    int getPrevLogIndex();
+    int getPrevLogTerm();
+    int getLastLogIndex();
+    int getLastLogTerm();
     AEResult sendAppendEntries(int term,
                                int node_id,
                                int prevLogIndex,
@@ -78,7 +59,6 @@ class WatRaftServer {
                                int leaderCommit,
                                std::string serverIp,
                                int serverPort);
-    void leaderElection();
     RVResult sendRequestVote( int term,
                               int candidate_id,
                               int last_log_index,
