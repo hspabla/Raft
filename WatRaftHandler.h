@@ -32,6 +32,14 @@ class WatRaftHandler : virtual public WatRaftIf {
     void debug_echo(std::string& _return, const std::string& msg);
   private:
     WatRaftServer* server;
+    AEResult processKeepalive( int term, int leader_id );
+
+    AEResult processAppendlog( const int32_t term,
+                               const int32_t leader_id,
+                               const int32_t prev_log_index,
+                               const int32_t prev_log_term,
+                               const std::vector<Entry>* entries,
+                               const int32_t leader_commit_index );
 };
 } // namespace WatRaft
 

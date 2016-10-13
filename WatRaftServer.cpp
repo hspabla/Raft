@@ -38,7 +38,7 @@ WatRaftServer::WatRaftServer( int node_id, const WatRaftConfig* config ) throw (
 
     log = serverStaticData->getLog();
 
-    printLog( log );
+    printLog();
     // start timer
     gettimeofday( &start, NULL );
 
@@ -55,7 +55,7 @@ WatRaftServer::~WatRaftServer() {
 
 // ----------------------------- HELPER FUNCTIONS --------------------------------//
 
-void WatRaftServer::printLog( std::vector<Entry>* log ) {
+void WatRaftServer::printLog() {
     std::cout << "--------- Entries in Log --------" << std::endl;
     std::vector<Entry>::iterator it = log->begin();
     for ( ; it != log->end() ; it++ ) {
@@ -141,6 +141,38 @@ void WatRaftServer::sendKeepalives( ) {
       }
     }
 }
+
+bool WatRaftServer::sendLogUpdate( std::vector<Entry>& newEntries ) {
+    int term = serverStaticData->getData()->currentTerm;
+    int quorum = 1; // since we already have the entry
+    ServerMap::const_iterator it = config->get_servers()->begin();
+    bool replicated = false;
+
+    for ( ; it != config->get_servers()->end(); it++) {
+      if ( it->first == node_id ) {
+        continue;
+      }
+      AEResult appendResult;
+      appendResult = sendAppendEntries( term,
+                                        node_id,
+                                        getPrevLogIndex(),
+                                        getPrevLogTerm(),
+                                        newEntries,
+                                        commitIndex,
+                                        ( it->second ).ip,
+                                        ( it->second).port );
+      if ( appendResult.success ) {
+        quorum += 1;
+      }
+      if ( quorum >= config->get_majority() ) {
+        commitIndex = getPrevLogIndex() + newEntries.size();
+        replicated = true;
+      }
+    }
+    return replicated;
+}
+
+
 
 // -------------------------- RFV and AE Messages --------------------------------//
 
@@ -260,6 +292,11 @@ void WatRaftServer::leaderElection() {
                                     last_log_term,
                                     ( it->second ).ip,
                                     ( it->second ).port );
+      if ( voteResult.term > term ) {
+        // more upto date server is present
+        wat_state.change_state( WatRaftState::FOLLOWER );
+        break;
+      }
       if ( voteResult.vote_granted ) {
         quorum += 1;
       }
@@ -271,6 +308,7 @@ void WatRaftServer::leaderElection() {
       if ( quorum >= config->get_majority() ) {
         updateServerTermVote( term, votedFor );
         wat_state.change_state( WatRaftState::LEADER );
+        leader_id = get_id();
         sendKeepalives();
         break;
       }
