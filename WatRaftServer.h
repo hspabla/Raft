@@ -10,7 +10,8 @@
 #include <thrift/server/TThreadedServer.h>
 #include <vector>
 #include <sys/time.h>
-#define DEBUG
+//#define DEBUG
+
 namespace WatRaft {
 
 class WatRaftConfig; // Forward declaration

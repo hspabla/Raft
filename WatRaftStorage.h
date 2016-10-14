@@ -33,6 +33,7 @@ class WatRaftStorage {
 
     void updateLog(Entry* entry);
     void updateData(struct ServerData* state);
+    void deleteLog( int term );
 };
 }
 

@@ -3,17 +3,23 @@ CPPFLAGS = -g -fpermissive -Wall -I. -I${HOME}/project/include -I${HOME}/project
 LDFLAGS = -L${HOME}/project/lib -lthrift -lpthread
 LD = g++
 
-PROGRAMS = server
+PROGRAMS = server client
 
-OBJECTS = WatRaftServer.o WatRaftHandler.o WatRaftState.o WatRaftConfig.o WatRaftStorage.o\
-	gen-cpp/WatRaft_constants.o gen-cpp/WatRaft.o gen-cpp/WatRaft_types.o
+SERVER_OBJECTS = WatRaftServer.o WatRaftHandler.o WatRaftState.o WatRaftConfig.o WatRaftStorage.o \
+								 gen-cpp/WatRaft_constants.o gen-cpp/WatRaft.o gen-cpp/WatRaft_types.o
 
-INCFILES = WatRaftHandler.h WatRaftServer.h WatRaftState.h WatRaftStorage.h \
-					 WatRaftConfig.h gen-cpp/WatRaft_constants.h gen-cpp/WatRaft.h gen-cpp/WatRaft_types.h
+SERVER_INCFILES = WatRaftHandler.h WatRaftServer.h WatRaftState.h WatRaftConfig.h WatRaftStorage.h \
+									gen-cpp/WatRaft_constants.h gen-cpp/WatRaft.h gen-cpp/WatRaft_types.h
 
-all: $(PROGRAMS) $(OBJECTS) $(INCFILES)
+CLIENT_OBJECTS = WatRaftClient.o WatRaftConfig.o
+CLIENT_INCFILES = WatRaftClient.h WatRaftConfig.h
 
-server: $(OBJECTS)
+all: $(PROGRAMS) $(SERVER_OBJECTS) $(CLIENT_OBJECTS) $(SERVER_INCFILES) $(CLIENT_INCFILES)
+
+server: $(SERVER_OBJECTS)
+	$(LD) $^ $(LDFLAGS) -o $@
+
+client: $(CLIENT_OBJECTS)
 	$(LD) $^ $(LDFLAGS) -o $@
 
 clean:

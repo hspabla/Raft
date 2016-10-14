@@ -42,8 +42,10 @@ WatRaftServer::WatRaftServer( int node_id, const WatRaftConfig* config ) throw (
     // start timer
     gettimeofday( &start, NULL );
 
-    commitIndex = 0;
     lastApplied = 0;
+    setLastLogIndex( 0 );
+    setLastLogTerm( 0 );
+    setCommitIndex( 0 );
 }
 
 WatRaftServer::~WatRaftServer() {
@@ -258,9 +260,8 @@ void WatRaftServer::leaderElection() {
     quorum += 1;
     gettimeofday( &start, NULL );
 
-    //TODO: add getLastLogIndex and getLastLogTerm methods
-    int last_log_index = 0;
-    int last_log_term = 0;
+    int last_log_index = getLastLogIndex();
+    int last_log_term = getLastLogTerm();
 
     std::cout << time1() << ": Starting new election for term : "
                          << term << std::endl;

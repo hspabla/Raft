@@ -112,5 +112,22 @@ void WatRaftStorage::updateData( struct ServerData* state ) {
     serverState.votedFor = state->votedFor;
 }
 
+void WatRaftStorage::deleteLog( int index ) {
+    log.resize( index );
+    fstream fs;
+    fs.open( logFile.c_str(), fstream::out );
+    if ( !fs ) {
+      cout << "Error opening file" << logFile << endl;
+    } else {
+      std::vector<Entry>::iterator it = log.begin();
+      for ( ; it != log.end(); it++ ) {
+        fs << it->term << '\n';
+        fs << it->key << '\n';
+        fs << it->val << '\n';
+      }
+    }
+    fs.close();
+     
+}
 
 }
