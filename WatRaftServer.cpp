@@ -26,8 +26,11 @@ using boost::shared_ptr;
 
 namespace WatRaft {
 
-WatRaftServer::WatRaftServer( int node_id, const WatRaftConfig* config ) throw ( int) :
-                                node_id( node_id ), rpc_server( NULL), config( config) {
+
+WatRaftServer::WatRaftServer( int node_id, const WatRaftConfig* config )
+                              throw ( int ) : node_id( node_id ), rpc_server( NULL),
+                                              config( config ) {
+
     int rc = pthread_create( &rpc_thread, NULL, start_rpc_server, this );
     if ( rc != 0 ) {
         throw rc; // Just throw the error code
@@ -36,13 +39,14 @@ WatRaftServer::WatRaftServer( int node_id, const WatRaftConfig* config ) throw (
     // intialize storage
     serverStaticData = new WatRaftStorage( node_id );
 
-    printLog();
     // start timer
     gettimeofday( &start, NULL );
 
+    // initialize raft state
     lastApplied = 0;
     newEntryFlag = false;
     setCommitIndex( 0 );
+
 }
 
 WatRaftServer::~WatRaftServer() {
@@ -92,6 +96,41 @@ void WatRaftServer::updateServerTermVote( int term, int votedFor ) {
     serverStaticData->updateData( &updateData );
 }
 
+void WatRaftServer::setNextIndex() {
+    ServerMap::const_iterator it = config->get_servers()->begin();
+    for( ; it != config->get_servers()->end(); it++ ) {
+      if ( it->first == node_id ) {
+        continue;
+      }
+      nextIndex[ it->first ] = getLastLogIndex() + 1;
+    }
+}
+
+void WatRaftServer::setMatchIndex() {
+    ServerMap::const_iterator it = config->get_servers()->begin();
+    for( ; it != config->get_servers()->end(); it++ ) {
+      if ( it->first == node_id ) {
+        continue;
+      }
+      matchIndex[ it->first ] = 0;
+    }
+}
+
+size_t WatRaftServer::getPrevLogIndex( Entry entry ){
+    size_t index = find( serverStaticData->getLog()->begin(),
+                      serverStaticData->getLog()->end(), entry ) -
+                                                serverStaticData->getLog()->begin();
+    if ( index >= serverStaticData->getLog()->size() ) {
+      return 0;
+    }
+    return index - 1;
+}
+
+int WatRaftServer::getPrevLogTerm( Entry entry ){
+    size_t index = getPrevLogIndex( entry );
+    return serverStaticData->getLog()->at( index ).term;
+}
+
 bool WatRaftServer::checkElectionTimeout() {
 /*  Randomaly chose election timeout period. If we have not received keepalive in
  *  that period ( which will happen in another thread ) election timer has expired
@@ -129,62 +168,83 @@ void WatRaftServer::sendKeepalives( ) {
       std::cout << time1() << " Sending keepalive from " << node_id
                 << " to " << it->first << std::endl;
       #endif
-      AEResult helloResult;
+      AEResult* helloResult;
       int myTerm = serverStaticData->getData()->currentTerm;
       std::vector<Entry> nullEntry;
       helloResult = sendAppendEntries( myTerm, node_id, 0, 0, nullEntry, commitIndex,
                                       ( it->second ).ip, (it->second).port);
 
-      if ( helloResult.term > myTerm ) {
-        wat_state.change_state( WatRaftState::FOLLOWER );
-        updateServerTermVote( helloResult.term,
+      if ( helloResult ) {
+        if ( helloResult->term > myTerm ) {
+          wat_state.change_state( WatRaftState::FOLLOWER );
+          updateServerTermVote( helloResult->term,
                               serverStaticData->getData()->votedFor );
-        #ifdef DEBUG
-        std::cout << time1() << ": Discoverd node with greater term "
-                  << helloResult.term
+          #ifdef DEBUG
+          std::cout << time1() << ": Discoverd node with greater term "
+                  << helloResult->term
                   << " my term was " << myTerm
                   << " no longer leader :( " << std::endl;
-        #endif
-        break;
+          #endif
+          delete helloResult;
+          break;
+        }
+        delete helloResult;
       }
     }
 }
 
-bool WatRaftServer::sendLogUpdate( std::vector<Entry>& newEntries ) {
+void WatRaftServer::sendLogUpdate() {
     int term = serverStaticData->getData()->currentTerm;
-    int quorum = 1; // since we already have the entry
+    int quorum = 1;                               // since we already have the entry
     ServerMap::const_iterator it = config->get_servers()->begin();
-    bool replicated = false;
 
     for ( ; it != config->get_servers()->end(); it++) {
       if ( it->first == node_id ) {
         continue;
       }
-      AEResult appendResult;
-      appendResult = sendAppendEntries( term,
-                                        node_id,
-                                        getPrevLogIndex(),
-                                        getPrevLogTerm(),
-                                        newEntries,
-                                        commitIndex,
-                                        ( it->second ).ip,
-                                        ( it->second).port );
-      if ( appendResult.success ) {
-        quorum += 1;
-      }
-      if ( quorum >= config->get_majority() ) {
-        commitIndex = getPrevLogIndex() + newEntries.size();
-        replicated = true;
+      //  last log index >= nextIndex for a follower, send log from nextIndex
+
+      if ( getLastLogIndex() >= nextIndex[ it->first ] ) {
+        std::vector<Entry> newEntries;
+        std::vector<Entry>::iterator i = find( serverStaticData->getLog()->begin(),
+                                               serverStaticData->getLog()->end(),
+                                               (*(serverStaticData->getLog()))
+                                                        [ nextIndex[ it->first ] ] );
+        for( ; i != serverStaticData->getLog()->end(); i++ ) {
+          newEntries.push_back( *i );
+        }
+        Entry firstEntry = newEntries[ 0 ];
+        int prevLogIndex = getPrevLogIndex( firstEntry );
+        int prevLogTerm = getPrevLogTerm( firstEntry );
+
+        AEResult* appendResult;
+        appendResult = sendAppendEntries( term, node_id, prevLogIndex, prevLogTerm,
+                                        newEntries, commitIndex,
+                                        ( it->second ).ip, ( it->second ).port );
+        if ( appendResult ) {
+          if ( appendResult->success ) {
+            quorum += 1;
+            nextIndex[ it->first ] = nextIndex[ it->first ] + newEntries.size();
+            matchIndex[ it->first ] = getLastLogIndex();
+          }
+          else {
+            nextIndex[ it->first ] = nextIndex[ it->first ] - 1;
+          }
+          delete appendResult;
+        }
+        if ( getLastLogIndex() > commitIndex ) {
+          if ( quorum >= config->get_majority() && getLastLogTerm() == term ) {
+            commitIndex = getLastLogIndex();
+          }
+        }
       }
     }
-    return replicated;
 }
-
 
 
 // -------------------------- RFV and AE Messages --------------------------------//
 
-RVResult WatRaftServer::sendRequestVote( int term,
+RVResult* WatRaftServer::sendRequestVote( int term,
                                          int candidate_id,
                                          int last_log_index,
                                          int last_log_term,
@@ -195,10 +255,10 @@ RVResult WatRaftServer::sendRequestVote( int term,
     boost::shared_ptr<TTransport> transport( new TBufferedTransport( socket ) );
     boost::shared_ptr<TProtocol> protocol( new TBinaryProtocol( transport ) );
     WatRaftClient client( protocol );
-    RVResult result;
+    RVResult* result = new RVResult();
     try {
       transport->open();
-      client.request_vote( result, term,
+      client.request_vote( *result, term,
                                    candidate_id,
                                    last_log_index,
                                    last_log_term );
@@ -208,11 +268,13 @@ RVResult WatRaftServer::sendRequestVote( int term,
       #ifdef DEBUG
       printf( "Caught exception: %s\n", e.what());
       #endif
+      delete result;
+      return NULL;
     }
     return result;
 }
 
-AEResult WatRaftServer::sendAppendEntries( int term,
+AEResult* WatRaftServer::sendAppendEntries( int term,
                                           int node_id,
                                           int prevLogIndex,
                                           int prevLogTerm,
@@ -225,10 +287,10 @@ AEResult WatRaftServer::sendAppendEntries( int term,
     boost::shared_ptr<TTransport> transport( new TBufferedTransport( socket ));
     boost::shared_ptr<TProtocol> protocol( new TBinaryProtocol( transport ));
     WatRaftClient client( protocol );
-    AEResult result;
+    AEResult* result = new AEResult();
     try {
       transport->open();
-      client.append_entries( result, term,
+      client.append_entries( *result, term,
                                     node_id,
                                     prevLogIndex,
                                     prevLogTerm,
@@ -240,6 +302,8 @@ AEResult WatRaftServer::sendAppendEntries( int term,
     #ifdef DEBUG
       printf( "Caught exception: %s\n", e.what());
     #endif
+      delete result;
+      return NULL;
     }
     return result;
 }
@@ -291,7 +355,7 @@ void WatRaftServer::leaderElection() {
       }
 
       // Send vote request to other server
-      RVResult voteResult;
+      RVResult* voteResult;
       std::cout << time1() << ": Requesting vote from : " << it->first << std::endl;
       voteResult = sendRequestVote( term,
                                     node_id,
@@ -299,27 +363,34 @@ void WatRaftServer::leaderElection() {
                                     last_log_term,
                                     ( it->second ).ip,
                                     ( it->second ).port );
-      if ( voteResult.term > term ) {
-        // more upto date server is present
-        wat_state.change_state( WatRaftState::FOLLOWER );
-        updateServerTermVote( voteResult.term,
-                              serverStaticData->getData()->votedFor );
-        break;
-      }
-      if ( voteResult.vote_granted ) {
-        quorum += 1;
-      }
+      if ( voteResult ) {
+        if ( voteResult->term > term ) {
+          // more upto date server is present
+          wat_state.change_state( WatRaftState::FOLLOWER );
+          updateServerTermVote( voteResult->term,
+                                serverStaticData->getData()->votedFor );
+          delete voteResult;
+          break;
+        }
+        if ( voteResult->vote_granted ) {
+          quorum += 1;
+        }
 
-      // once we have majority of votes, we don't need any more votes to be a leader.
-      // This will reduce RPC messages, however some servers will never vote, if we
-      // keep achieving majority before reaching them. I dont think its a problem
-      // keepalive will notify them.
-      if ( quorum >= config->get_majority() ) {
-        updateServerTermVote( term, votedFor );
-        wat_state.change_state( WatRaftState::LEADER );
-        leader_id = get_id();
-        sendKeepalives();
-        break;
+        // once we have majority of votes, we don't need any more votes to be a leader.
+        // This will reduce RPC messages, however some servers will never vote, if we
+        // keep achieving majority before reaching them. I dont think its a problem
+        // keepalive will notify them.
+        if ( quorum >= config->get_majority() ) {
+          updateServerTermVote( term, votedFor );
+          wat_state.change_state( WatRaftState::LEADER );
+          leader_id = get_id();
+          setNextIndex();
+          setMatchIndex();
+          sendKeepalives();
+          delete voteResult;
+          break;
+        }
+        delete voteResult;
       }
     }
     return;
@@ -335,18 +406,11 @@ int WatRaftServer::wait() {
            checkElectionTimeout() ) {
         leaderElection();
       }
-      if ( newEntryFlag ) {
-        bool success = sendLogUpdate( newEntries );
-        if ( success ) {
-          newEntries.clear();
-          newEntryFlag = false;
-          printLog();
-        }
-      }
       // sleep for 50 ms
       usleep( 50000 );
       if ( wat_state.get_state() == WatRaftState::LEADER ) {
         sendKeepalives();
+        sendLogUpdate();
       }
     }
     pthread_join( rpc_thread, NULL );

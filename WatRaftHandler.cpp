@@ -32,8 +32,6 @@ void WatRaftHandler::put(const std::string& key, const std::string& val) {
     }
 
     // we are leader, got a client request to replicate data.
-    server->setPrevLogIndex( server->getLastLogIndex() );
-    server->setPrevLogTerm( server->getLastLogTerm() );
 
     Entry newEntry;
     newEntry.term = server->serverStaticData->getData()->currentTerm;
@@ -72,9 +70,12 @@ AEResult WatRaftHandler::processAppendlog( const int32_t term,
                                            const int32_t leader_commit_index ) {
     AEResult result;
     int myTerm = server->serverStaticData->getData()->currentTerm;
-    if ( myTerm < term ) {
+    if ( myTerm > term ) {
       result.success = false;
-    } else if ( server->serverStaticData->getLog()->at( prev_log_index ).term !=
+    } else if ( server->getLastLogIndex() < prev_log_index ) {
+      result.success = false;
+    }
+    else if ( server->serverStaticData->getLog()->at( prev_log_index ).term !=
                 prev_log_term ) {
       // we dont agree with servers logs
       result.success = false;
@@ -83,7 +84,7 @@ AEResult WatRaftHandler::processAppendlog( const int32_t term,
       size_t myLogIndex = prev_log_index + 1;
 
       // deleting corrupted log
-      while ( myLogIndex > server->serverStaticData->getLog()->size() ) {
+      while ( myLogIndex < server->serverStaticData->getLog()->size() ) {
         if ( server->serverStaticData->getLog()->at( myLogIndex ).term !=
              it->term ) {
           // delete all entries from our log beyond this index
