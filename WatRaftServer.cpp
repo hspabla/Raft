@@ -203,38 +203,49 @@ void WatRaftServer::sendLogUpdate() {
         continue;
       }
       //  last log index >= nextIndex for a follower, send log from nextIndex
-
-      if ( getLastLogIndex() >= nextIndex[ it->first ] ) {
-        std::vector<Entry> newEntries;
-        std::vector<Entry>::iterator i = find( serverStaticData->getLog()->begin(),
-                                               serverStaticData->getLog()->end(),
-                                               (*(serverStaticData->getLog()))
-                                                        [ nextIndex[ it->first ] ] );
-        for( ; i != serverStaticData->getLog()->end(); i++ ) {
-          newEntries.push_back( *i );
-        }
-        Entry firstEntry = newEntries[ 0 ];
-        int prevLogIndex = getPrevLogIndex( firstEntry );
-        int prevLogTerm = getPrevLogTerm( firstEntry );
-
-        AEResult* appendResult;
-        appendResult = sendAppendEntries( term, node_id, prevLogIndex, prevLogTerm,
-                                        newEntries, commitIndex,
-                                        ( it->second ).ip, ( it->second ).port );
-        if ( appendResult ) {
-          if ( appendResult->success ) {
-            quorum += 1;
-            nextIndex[ it->first ] = nextIndex[ it->first ] + newEntries.size();
-            matchIndex[ it->first ] = getLastLogIndex();
+      int next = nextIndex.find( it->first )->second ;
+      if ( getLastLogIndex() >= next ) {
+        bool notMatched = true;
+        while( notMatched ) {
+          std::cout << time1() << ": Updating log in node: " << it->first
+                    << ", its next index is: " << next
+                    << std::endl << "My log" << std::endl;
+          printLog();
+          std::vector<Entry> newEntries;
+          std::vector<Entry>::iterator i = find( serverStaticData->getLog()->begin(),
+                                                 serverStaticData->getLog()->end(),
+                                                 (*(serverStaticData->getLog()))
+                                                          [ next ] );
+          for( ; i != serverStaticData->getLog()->end(); i++ ) {
+            newEntries.push_back( *i );
           }
-          else {
-            nextIndex[ it->first ] = nextIndex[ it->first ] - 1;
+          Entry firstEntry = newEntries[ 0 ];
+          int prevLogIndex = getPrevLogIndex( firstEntry );
+          int prevLogTerm = getPrevLogTerm( firstEntry );
+          AEResult* appendResult;
+          appendResult = sendAppendEntries( term, node_id, prevLogIndex, prevLogTerm,
+                                          newEntries, commitIndex,
+                                          ( it->second ).ip, ( it->second ).port );
+          if ( appendResult ) {
+            if ( appendResult->success ) {
+              quorum += 1;
+              nextIndex[ it->first ] = getLastLogIndex() + 1;
+              matchIndex[ it->first ] = getLastLogIndex();
+              notMatched = false;
+            }
+            else {
+              nextIndex[ it->first ] = next - 1;
+            }
+            delete appendResult;
+          } else {
+            break; // connection to server failed, try later.
           }
-          delete appendResult;
         }
         if ( getLastLogIndex() > commitIndex ) {
           if ( quorum >= config->get_majority() && getLastLogTerm() == term ) {
             commitIndex = getLastLogIndex();
+            std::cout << time1() << ": Updating commitIndex: " << commitIndex
+                      << std::endl;
           }
         }
       }

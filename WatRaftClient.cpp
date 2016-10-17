@@ -24,7 +24,7 @@ namespace WatRaft {
 
 
 WatRaftUser::WatRaftUser( int node_id, const WatRaftConfig* config ) {
-    config = config;
+    this->config = config;
     updateServerInfo( node_id, config );
 }
 

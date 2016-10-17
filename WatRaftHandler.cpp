@@ -19,10 +19,11 @@ void WatRaftHandler::get(std::string& _return, const std::string& key) {
 
 void WatRaftHandler::put(const std::string& key, const std::string& val) {
     if ( server->wat_state.get_state() == WatRaftState::FOLLOWER ) {
+      std::cout << "Client trying to connect, redirecting to leader" << std::endl;
       WatRaftException ouch;
+      ouch.__set_node_id( server->leader_id );
       ouch.error_code = WatRaftErrorType::NOT_LEADER;
       ouch.error_message = "client connecting to follower";
-      ouch.node_id = server->leader_id;
       throw( ouch );
     } else if ( server->wat_state.get_state() == WatRaftState::CANDIDATE ) {
       WatRaftException ouch;
@@ -73,13 +74,23 @@ AEResult WatRaftHandler::processAppendlog( const int32_t term,
     if ( myTerm > term ) {
       result.success = false;
     } else if ( server->getLastLogIndex() < prev_log_index ) {
+      std::cout << server->time1() << ": Unsuccessful log update attempt"
+                              << ", My last log index: " << server->getLastLogIndex()
+                              << " leader prev_log_index: " << prev_log_index
+                              << std::endl;
       result.success = false;
     }
     else if ( server->serverStaticData->getLog()->at( prev_log_index ).term !=
                 prev_log_term ) {
       // we dont agree with servers logs
+      std::cout << server->time1() << ": Unsuccessful log update attempt, "
+                              << "My term at prev_log_term: "
+                              << server->serverStaticData->getLog()->at( prev_log_index ).term
+                              << " leader prev_log_term: " << prev_log_term << std::endl;
       result.success = false;
     } else {
+      std::cout << server->time1() << ": My Log before update" << std::endl;
+      server->printLog();
       std::vector<Entry>::const_iterator it = entries->begin();
       size_t myLogIndex = prev_log_index + 1;
 
@@ -105,10 +116,15 @@ AEResult WatRaftHandler::processAppendlog( const int32_t term,
       if ( leader_commit_index > server->getCommitIndex() ) {
         if ( leader_commit_index < server->getLastLogIndex() ) {
           server->setCommitIndex( leader_commit_index );
+          std::cout << server->time1() << ": Commit Index " << server->getCommitIndex()
+               << std::endl;
         } else {
           server->setCommitIndex( server->getLastLogIndex() );
+          std::cout << server->time1() << ": Commit Index " << server->getCommitIndex()
+               << std::endl;
         }
       }
+      server->printLog();
       result.success = true;
     }
     result.term = server->serverStaticData->getData()->currentTerm;
