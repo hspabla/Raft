@@ -36,31 +36,35 @@ WatRaftServer::WatRaftServer( int node_id, const WatRaftConfig* config ) throw (
     // intialize storage
     serverStaticData = new WatRaftStorage( node_id );
 
-    log = serverStaticData->getLog();
-
     printLog();
     // start timer
     gettimeofday( &start, NULL );
 
     lastApplied = 0;
-    setLastLogIndex( 0 );
-    setLastLogTerm( 0 );
+    newEntryFlag = false;
     setCommitIndex( 0 );
 }
 
 WatRaftServer::~WatRaftServer() {
     printf( "In destructor of WatRaftServer\n" );
     delete serverStaticData;
-    delete log;
     delete rpc_server;
 }
 
 // ----------------------------- HELPER FUNCTIONS --------------------------------//
 
+int WatRaftServer::getLastLogIndex() {
+    return serverStaticData->getLog()->size() - 1;
+}
+
+int WatRaftServer::getLastLogTerm() {
+    return serverStaticData->getLog()->back().term;
+}
+
 void WatRaftServer::printLog() {
     std::cout << "--------- Entries in Log --------" << std::endl;
-    std::vector<Entry>::iterator it = log->begin();
-    for ( ; it != log->end() ; it++ ) {
+    std::vector<Entry>::iterator it = serverStaticData->getLog()->begin();
+    for ( ; it != serverStaticData->getLog()->end() ; it++ ) {
       std::cout << "Term: " << it->term
                 << " Key: " << it->key
                 << " Value: " << it->val << std::endl;
@@ -133,6 +137,8 @@ void WatRaftServer::sendKeepalives( ) {
 
       if ( helloResult.term > myTerm ) {
         wat_state.change_state( WatRaftState::FOLLOWER );
+        updateServerTermVote( helloResult.term,
+                              serverStaticData->getData()->votedFor );
         #ifdef DEBUG
         std::cout << time1() << ": Discoverd node with greater term "
                   << helloResult.term
@@ -296,6 +302,8 @@ void WatRaftServer::leaderElection() {
       if ( voteResult.term > term ) {
         // more upto date server is present
         wat_state.change_state( WatRaftState::FOLLOWER );
+        updateServerTermVote( voteResult.term,
+                              serverStaticData->getData()->votedFor );
         break;
       }
       if ( voteResult.vote_granted ) {
@@ -323,8 +331,17 @@ void WatRaftServer::leaderElection() {
 int WatRaftServer::wait() {
     wat_state.wait_ge( WatRaftState::SERVER_CREATED );
     while ( true ) {
-      if ( checkElectionTimeout() ) {
+      if ( wat_state.get_state() != WatRaftState::LEADER &&
+           checkElectionTimeout() ) {
         leaderElection();
+      }
+      if ( newEntryFlag ) {
+        bool success = sendLogUpdate( newEntries );
+        if ( success ) {
+          newEntries.clear();
+          newEntryFlag = false;
+          printLog();
+        }
       }
       // sleep for 50 ms
       usleep( 50000 );

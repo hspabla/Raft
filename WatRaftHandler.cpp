@@ -32,8 +32,8 @@ void WatRaftHandler::put(const std::string& key, const std::string& val) {
     }
 
     // we are leader, got a client request to replicate data.
-    server->setPrevLogIndex( server->currentLogIndex() );
-    server->setPrevLogTerm( server->currentLogTerm() );
+    server->setPrevLogIndex( server->getLastLogIndex() );
+    server->setPrevLogTerm( server->getLastLogTerm() );
 
     Entry newEntry;
     newEntry.term = server->serverStaticData->getData()->currentTerm;
@@ -41,14 +41,10 @@ void WatRaftHandler::put(const std::string& key, const std::string& val) {
     newEntry.val = val;
     server->serverStaticData->updateLog( &newEntry );
 
-    std::vector<Entry> newEntries;
-    newEntries.push_back( newEntry );
+    server->newEntries.clear();
+    server->newEntries.push_back( newEntry );
+    server->newEntryFlag = true;
 
-    if ( server->sendLogUpdate( newEntries ) ) {
-      std::cout << server->time1() << ": Log updated, may not be committed yet"
-                << std::endl;
-      server->printLog();
-    }
 }
 
 AEResult WatRaftHandler::processKeepalive( int term, int leader_id ) {
@@ -78,7 +74,8 @@ AEResult WatRaftHandler::processAppendlog( const int32_t term,
     int myTerm = server->serverStaticData->getData()->currentTerm;
     if ( myTerm < term ) {
       result.success = false;
-    } else if ( server->log->at( prev_log_index ).term != prev_log_term ) {
+    } else if ( server->serverStaticData->getLog()->at( prev_log_index ).term !=
+                prev_log_term ) {
       // we dont agree with servers logs
       result.success = false;
     } else {
@@ -86,8 +83,9 @@ AEResult WatRaftHandler::processAppendlog( const int32_t term,
       size_t myLogIndex = prev_log_index + 1;
 
       // deleting corrupted log
-      while ( myLogIndex > server->log->size() ) {
-        if ( server->log->at( myLogIndex ).term != it->term ) {
+      while ( myLogIndex > server->serverStaticData->getLog()->size() ) {
+        if ( server->serverStaticData->getLog()->at( myLogIndex ).term !=
+             it->term ) {
           // delete all entries from our log beyond this index
           server->serverStaticData->deleteLog( myLogIndex );
           break;
@@ -100,8 +98,6 @@ AEResult WatRaftHandler::processAppendlog( const int32_t term,
         Entry entry = *it;
         server->serverStaticData->updateLog( &entry );
       }
-      server->setLastLogIndex( server->log->size() - 1 );
-      server->setLastLogTerm( server->log->back().term );
       server->leader_id = leader_id;
 
       // Updating commitIndex
@@ -127,23 +123,21 @@ void WatRaftHandler::append_entries(AEResult& _return,
     AEResult result;
     gettimeofday( &(server->start ), NULL );
     if ( entries.size() == 0 ) {
-      // keepalive message
       result = processKeepalive( term, leader_id );
     } else {
-      // log append message
-      processAppendlog( term, leader_id, prev_log_index, prev_log_term, &entries,
-                        leader_commit_index );
+      result = processAppendlog( term, leader_id, prev_log_index, prev_log_term, &entries,
+                                 leader_commit_index );
     }
     server->updateServerTermVote( result.term,
                                   server->serverStaticData->getData()->votedFor );
     _return = result;
 }
 
-void WatRaftHandler::request_vote(RVResult& _return,
-                                  const int32_t term,
-                                  const int32_t candidate_id,
-                                  const int32_t last_log_index,
-                                  const int32_t last_log_term) {
+void WatRaftHandler::request_vote( RVResult& _return,
+                                   const int32_t term,
+                                   const int32_t candidate_id,
+                                   const int32_t last_log_index,
+                                   const int32_t last_log_term ) {
     RVResult result;
     int currentTerm = server->serverStaticData->getData()->currentTerm;
 
@@ -164,9 +158,9 @@ void WatRaftHandler::request_vote(RVResult& _return,
                                      my term: " << currentTerm << std::endl;
     }
     else if ( server->getLastLogTerm() > last_log_term ) {
-      std::cout << server->time1() << ": No Vote, my last log term > request vote term \
-                                      index " << server->getLastLogTerm() << " < "
-                                      << last_log_term << std::endl;
+      std::cout << server->time1()
+                << ": No Vote, my last log term > request vote term index "
+                << server->getLastLogTerm() << " > " << last_log_term << std::endl;
       result.vote_granted = false;
     }
     else if ( server->getLastLogTerm() == last_log_term ) {

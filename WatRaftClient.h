@@ -8,15 +8,17 @@ namespace WatRaft {
 
 class WatRaftUser {
   private:
-   int server_id;
-   std::string server_ip;
-   int server_port;
-
+    int server_id;
+    const WatRaftConfig* config;
+    std::string server_ip;
+    int server_port;
+    void putOp( std::string key, std::string val );
+    void updateServerInfo( int node_id, const WatRaftConfig* config );
 
   public:
     WatRaftUser ( int node_id, const WatRaftConfig* config );
     ~WatRaftUser () {}
-
+    void replicationService();
 
 };
 

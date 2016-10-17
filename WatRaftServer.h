@@ -31,19 +31,16 @@ class WatRaftServer {
     long int time1();
     void printLog();
     int leader_id;
-
-    int currentLogIndex() { return log->size(); }
-    int currentLogTerm() { return (*log)[ currentLogIndex() ].term; }
+    std::vector<Entry> newEntries;
+    bool newEntryFlag;
 
     int getPrevLogIndex() { return prevLogIndex; }
     int getPrevLogTerm() { return prevLogTerm; }
-    int getLastLogIndex() { return lastLogIndex; }
-    int getLastLogTerm() { return lastLogTerm; }
+    int getLastLogIndex();
+    int getLastLogTerm();
     int getCommitIndex() { return commitIndex; }
     void setPrevLogIndex( int index ) { prevLogIndex = index; }
     void setPrevLogTerm( int term ) { prevLogTerm = term; }
-    void setLastLogIndex( int index ) { lastLogIndex = index; }
-    void setLastLogTerm( int term ) { lastLogTerm = term; }
     void setCommitIndex( int index ) { commitIndex = index; }
 
     bool sendLogUpdate( std::vector<Entry>& newEntries );
@@ -59,8 +56,6 @@ class WatRaftServer {
     int lastApplied;
     int prevLogIndex;
     int prevLogTerm;
-    int lastLogIndex;
-    int lastLogTerm;
 
     std::vector<int> nextIndex;
     std::vector<int> matchIndex;
@@ -71,14 +66,14 @@ class WatRaftServer {
     void leaderElection();
 
 
-    AEResult sendAppendEntries(int term,
-                               int node_id,
-                               int prevLogIndex,
-                               int prevLogTerm,
-                               std::vector<Entry>& entries,
-                               int leaderCommit,
-                               std::string serverIp,
-                               int serverPort);
+    AEResult sendAppendEntries( int term,
+                                int node_id,
+                                int prevLogIndex,
+                                int prevLogTerm,
+                                std::vector<Entry>& entries,
+                                int leaderCommit,
+                                std::string serverIp,
+                                int serverPort);
     RVResult sendRequestVote( int term,
                               int candidate_id,
                               int last_log_index,
