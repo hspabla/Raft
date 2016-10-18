@@ -203,19 +203,18 @@ void WatRaftServer::sendLogUpdate() {
         continue;
       }
       //  last log index >= nextIndex for a follower, send log from nextIndex
-      int next = nextIndex.find( it->first )->second ;
-      if ( getLastLogIndex() >= next ) {
+      if ( getLastLogIndex() >= nextIndex[ it->first ] ) {
         bool notMatched = true;
         while( notMatched ) {
           std::cout << time1() << ": Updating log in node: " << it->first
-                    << ", its next index is: " << next
+                    << ", its next index is: " << nextIndex[ it->first ]
                     << std::endl << "My log" << std::endl;
           printLog();
           std::vector<Entry> newEntries;
           std::vector<Entry>::iterator i = find( serverStaticData->getLog()->begin(),
                                                  serverStaticData->getLog()->end(),
                                                  (*(serverStaticData->getLog()))
-                                                          [ next ] );
+                                                        [ nextIndex[ it->first ] ] );
           for( ; i != serverStaticData->getLog()->end(); i++ ) {
             newEntries.push_back( *i );
           }
@@ -234,7 +233,7 @@ void WatRaftServer::sendLogUpdate() {
               notMatched = false;
             }
             else {
-              nextIndex[ it->first ] = next - 1;
+              nextIndex[ it->first ] = nextIndex[ it->first ] - 1;
             }
             delete appendResult;
           } else {
@@ -254,6 +253,9 @@ void WatRaftServer::sendLogUpdate() {
 
 
 // -------------------------- RFV and AE Messages --------------------------------//
+// In ideal world we would like to send these in parellel, but thrift does not
+// support that idea for the time being. So, we serialize the communication to
+// servers
 
 RVResult* WatRaftServer::sendRequestVote( int term,
                                          int candidate_id,
@@ -417,7 +419,7 @@ int WatRaftServer::wait() {
            checkElectionTimeout() ) {
         leaderElection();
       }
-      // sleep for 50 ms
+      // send keepalive every 50 ms
       usleep( 50000 );
       if ( wat_state.get_state() == WatRaftState::LEADER ) {
         sendKeepalives();

@@ -66,14 +66,60 @@ void WatRaftUser::putOp( std::string key, std::string val ) {
     return;
 }
 
-void WatRaftUser::replicationService() {
-    std::string key;
+std::string WatRaftUser::getOp( std::string key) {
+
     std::string val;
-    std::cout << "Enter Key" << std::endl;
-    std::cin >> key;
-    std::cout << "Enter Val" << std::endl;
-    std::cin >> val;
-    putOp( key, val );
+    boost::shared_ptr<TSocket> socket( new TSocket( server_ip, server_port ) );
+    boost::shared_ptr<TTransport> transport( new TBufferedTransport( socket ) );
+    boost::shared_ptr<TProtocol> protocol( new TBinaryProtocol( transport ) );
+    WatRaftClient client( protocol );
+    try {
+      transport->open();
+      client.get( val, key );
+      transport->close();
+      }
+    catch ( TTransportException e ) {
+      printf( "Caught exception: %s\n", e.what());
+    }
+    catch ( WatRaftException e ) {
+      if ( e.error_code == WatRaftErrorType::NOT_LEADER ) {
+        updateServerInfo( e.node_id, config );
+        return getOp( key );
+      }
+    }
+    return val;
+}
+
+
+
+void WatRaftUser::replicationService() {
+    int input;
+    while ( true ) {
+      std::cout << "Enter 1 to input key/val" << std::endl;
+      std::cout << "Enter 2 to get value for key" << std::endl;
+      std::cout << "Any other key to exit" << std::endl;
+      std::cin >> input;
+
+      std::string key;
+      std::string val;
+      switch( input ) {
+        case (1):
+                std::cout << "Key: " << std::flush;
+                std::cin >> key;
+                std::cout << "Value: " << std::flush;
+                std::cin >> val;
+                putOp( key, val );
+                break;
+        case (2):
+                std::cout << "Key: " << std::flush;
+                std::cin >> key;
+                val = getOp( key );
+                std::cout << val << std::endl;
+                break;
+        default:
+                return;
+      }
+    }
 }
 
 

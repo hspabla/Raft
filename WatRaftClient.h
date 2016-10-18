@@ -13,6 +13,7 @@ class WatRaftUser {
     std::string server_ip;
     int server_port;
     void putOp( std::string key, std::string val );
+    std::string getOp( std::string key );
     void updateServerInfo( int node_id, const WatRaftConfig* config );
 
   public:

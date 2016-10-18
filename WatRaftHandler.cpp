@@ -13,8 +13,17 @@ WatRaftHandler::WatRaftHandler(WatRaftServer* raft_server) : server(raft_server)
 WatRaftHandler::~WatRaftHandler() {}
 
 void WatRaftHandler::get(std::string& _return, const std::string& key) {
-    // Your implementation goes here
-    printf("get\n");
+      std::vector<Entry>* log = server->serverStaticData->getLog();
+      std::vector<Entry>::iterator it = log->begin();
+      for( ; it != log->end(); it++ ) {
+        if ( it->key == key ) {
+          _return = it->val;
+          break;
+        }
+      }
+      if ( it == log->end() ) {
+        _return = "Key not found";
+      }
 }
 
 void WatRaftHandler::put(const std::string& key, const std::string& val) {
