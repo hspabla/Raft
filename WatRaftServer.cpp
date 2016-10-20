@@ -39,6 +39,8 @@ WatRaftServer::WatRaftServer( int node_id, const WatRaftConfig* config )
     // intialize storage
     serverStaticData = new WatRaftStorage( node_id );
 
+    srand ( time( NULL ) );
+
     // start timer
     gettimeofday( &start, NULL );
 
@@ -66,20 +68,19 @@ int WatRaftServer::getLastLogTerm() {
 }
 
 void WatRaftServer::printLog() {
-    std::cout << "--------- Entries in Log --------" << std::endl;
+    std::cout << "(Replication)--------- Entries in Log --------" << std::endl;
     std::vector<Entry>::iterator it = serverStaticData->getLog()->begin();
     for ( ; it != serverStaticData->getLog()->end() ; it++ ) {
-      std::cout << "Term: " << it->term
+      std::cout << "(Replication) Term: " << it->term
                 << " Key: " << it->key
                 << " Value: " << it->val << std::endl;
     }
-    std::cout << "---------------------------------" << std::endl;
+    std::cout << "(Replication)---------------------------------" << std::endl;
 }
 
 int WatRaftServer::randTimeout() {
 /* generate random number btw 600 and 800 */
-    srand ( time( NULL ) );
-    return rand() % 200 + 600;
+    return rand() % 600 + 200;
 }
 
 long int WatRaftServer::time1() {
@@ -143,9 +144,11 @@ bool WatRaftServer::checkElectionTimeout() {
       int electionTimeout  = randTimeout();
       if ( ( wat_state.get_state() != WatRaftState::LEADER ) &&
            ( elapsedTime  > electionTimeout ) ){
-        std::cout << time1() << ": elapsedTime - " << elapsedTime
+        #ifndef DEBUG
+        std::cout << time1() << ":(Election) elapsedTime - " << elapsedTime
                              << ": randTimeout - " << electionTimeout << std::endl;
-        std::cout << time1() << ": Election timeout" << std::endl;
+        #endif
+        std::cout << time1() << ":(Election) Election timeout" << std::endl;
         electionTime = true;
       }
       return electionTime;
@@ -206,10 +209,9 @@ void WatRaftServer::sendLogUpdate() {
       if ( getLastLogIndex() >= nextIndex[ it->first ] ) {
         bool notMatched = true;
         while( notMatched ) {
-          std::cout << time1() << ": Updating log in node: " << it->first
+          std::cout << time1() << ":(Replication) Updating log in node: " << it->first
                     << ", its next index is: " << nextIndex[ it->first ]
                     << std::endl << "My log" << std::endl;
-          printLog();
           std::vector<Entry> newEntries;
           std::vector<Entry>::iterator i = find( serverStaticData->getLog()->begin(),
                                                  serverStaticData->getLog()->end(),
@@ -243,7 +245,7 @@ void WatRaftServer::sendLogUpdate() {
         if ( getLastLogIndex() > commitIndex ) {
           if ( quorum >= config->get_majority() && getLastLogTerm() == term ) {
             commitIndex = getLastLogIndex();
-            std::cout << time1() << ": Updating commitIndex: " << commitIndex
+            std::cout << time1() << ":(Replication) Updating commitIndex: " << commitIndex
                       << std::endl;
           }
         }
@@ -340,42 +342,40 @@ void WatRaftServer::leaderElection() {
     wat_state.change_state( WatRaftState::CANDIDATE );
     int term = serverStaticData->getData()->currentTerm + 1;
     int votedFor = node_id;
+    updateServerTermVote( term, votedFor );
     quorum += 1;
     gettimeofday( &start, NULL );
 
     int last_log_index = getLastLogIndex();
     int last_log_term = getLastLogTerm();
 
-    std::cout << time1() << ": Starting new election for term : "
+    std::cout << time1() << ":(Election) Starting new election for term : "
                          << term << std::endl;
 
     ServerMap::const_iterator it = config->get_servers()->begin();
     for ( ; it != config->get_servers()->end(); it++) {
 
-      // Someone else has become leader and we received append RPC message,
-      // which changed our state to FOLLOWER.
-      if ( wat_state.get_state() != WatRaftState::CANDIDATE ) {
-        return;
-      }
-
       if ( it->first == node_id ) {
         continue;
       }
-
       if ( checkElectionTimeout() ) {
         leaderElection();
         return;
       }
-
       // Send vote request to other server
       RVResult* voteResult;
-      std::cout << time1() << ": Requesting vote from : " << it->first << std::endl;
+      std::cout << time1() << ":(Election) Requesting vote from : " << it->first << std::endl;
       voteResult = sendRequestVote( term,
                                     node_id,
                                     last_log_index,
                                     last_log_term,
                                     ( it->second ).ip,
                                     ( it->second ).port );
+      // Someone else has become leader and we received append RPC message,
+      // which changed our state to FOLLOWER.
+      if ( wat_state.get_state() != WatRaftState::CANDIDATE ) {
+        return;
+      }
       if ( voteResult ) {
         if ( voteResult->term > term ) {
           // more upto date server is present
@@ -387,6 +387,7 @@ void WatRaftServer::leaderElection() {
         }
         if ( voteResult->vote_granted ) {
           quorum += 1;
+          std::cout << time1() << ":(Election) Vote received from : " << it->first << std::endl;
         }
 
         // once we have majority of votes, we don't need any more votes to be a leader.
@@ -394,11 +395,11 @@ void WatRaftServer::leaderElection() {
         // keep achieving majority before reaching them. I dont think its a problem
         // keepalive will notify them.
         if ( quorum >= config->get_majority() ) {
-          updateServerTermVote( term, votedFor );
           wat_state.change_state( WatRaftState::LEADER );
           leader_id = get_id();
           setNextIndex();
           setMatchIndex();
+          std::cout << time1() << ":(Election) LEADER for term : " << term << std::endl;
           sendKeepalives();
           delete voteResult;
           break;
@@ -419,8 +420,8 @@ int WatRaftServer::wait() {
            checkElectionTimeout() ) {
         leaderElection();
       }
-      // send keepalive every 50 ms
-      usleep( 50000 );
+      // send keepalive every 10 ms
+      usleep( 10000 );
       if ( wat_state.get_state() == WatRaftState::LEADER ) {
         sendKeepalives();
         sendLogUpdate();
@@ -468,7 +469,7 @@ using namespace WatRaft;
 
 int main( int argc, char **argv ) {
     if ( argc < 3 ) {
-        printf( "Usage: %s server_id config_file\n", argv[0] );
+      std::cout << "Usage: server_id config_file" << std::endl;
         return -1;
     }
     WatRaftConfig config;

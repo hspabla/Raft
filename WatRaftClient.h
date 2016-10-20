@@ -19,7 +19,8 @@ class WatRaftUser {
   public:
     WatRaftUser ( int node_id, const WatRaftConfig* config );
     ~WatRaftUser () {}
-    void replicationService();
+    void replicationService( std::string opt, std::string key,
+                             std::string val );
 
 };
 

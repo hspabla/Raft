@@ -49,6 +49,7 @@ void WatRaftUser::putOp( std::string key, std::string val ) {
     boost::shared_ptr<TProtocol> protocol( new TBinaryProtocol( transport ) );
     WatRaftClient client( protocol );
     try {
+      std::cout << "Client - Connecting " << server_id <<  std::endl;
       transport->open();
       client.put( key, val );
       transport->close();
@@ -58,6 +59,8 @@ void WatRaftUser::putOp( std::string key, std::string val ) {
     }
     catch ( WatRaftException e ) {
       if ( e.error_code == WatRaftErrorType::NOT_LEADER ) {
+        std::cout << "Client - Error: connecting " << server_id << ", leader is : "
+                  << e.node_id << std::endl;
         updateServerInfo( e.node_id, config );
         putOp( key, val );
         return;
@@ -74,6 +77,7 @@ std::string WatRaftUser::getOp( std::string key) {
     boost::shared_ptr<TProtocol> protocol( new TBinaryProtocol( transport ) );
     WatRaftClient client( protocol );
     try {
+      std::cout << "Client - Connecting " << server_id <<  std::endl;
       transport->open();
       client.get( val, key );
       transport->close();
@@ -83,42 +87,33 @@ std::string WatRaftUser::getOp( std::string key) {
     }
     catch ( WatRaftException e ) {
       if ( e.error_code == WatRaftErrorType::NOT_LEADER ) {
+        std::cout << "Client - Error: connecting " << server_id << ", leader is : "
+                  << e.node_id << std::endl;
         updateServerInfo( e.node_id, config );
         return getOp( key );
+      } else if ( e.error_code == WatRaftErrorType::LEADER_NOT_AVAILABLE ) {
+        std::cout << "Client - Error: connecting " << server_id
+                  << ", no leader available" << std::endl;
+        usleep( 1000 );
+        return getOp( key );
       }
+
     }
     return val;
 }
 
 
 
-void WatRaftUser::replicationService() {
-    int input;
-    while ( true ) {
-      std::cout << "Enter 1 to input key/val" << std::endl;
-      std::cout << "Enter 2 to get value for key" << std::endl;
-      std::cout << "Any other key to exit" << std::endl;
-      std::cin >> input;
-
-      std::string key;
-      std::string val;
-      switch( input ) {
-        case (1):
-                std::cout << "Key: " << std::flush;
-                std::cin >> key;
-                std::cout << "Value: " << std::flush;
-                std::cin >> val;
-                putOp( key, val );
-                break;
-        case (2):
-                std::cout << "Key: " << std::flush;
-                std::cin >> key;
-                val = getOp( key );
-                std::cout << val << std::endl;
-                break;
-        default:
-                return;
-      }
+void WatRaftUser::replicationService( std::string opt, std::string key,
+                                                       std::string val) {
+    if ( opt == "put" ) {
+        putOp( key, val );
+        std::cout << "Client - put -> key : " << key << " - " << "val : " << val
+                  << std::endl;
+    } else if ( opt == "get" ) {
+        std::string val = getOp( key );
+        std::cout << "Client - get <- key : " << key << " - " << "val : " << val
+                  << std::endl;
     }
 }
 
@@ -128,13 +123,16 @@ void WatRaftUser::replicationService() {
 using namespace WatRaft;
 
 int main( int argc, char** argv ) {
-    if( argc < 3 ) {
-      printf( "Usage: %s default_server config_file\n", argv[0] );
+    if( argc < 4 ) {
+      printf( "Usage: %s default_server config_file operation key val\n", argv[0] );
     }
     WatRaftConfig config;
     config.parse( argv[2] );
     WatRaftUser user( atoi( argv[1] ), &config );
-    user.replicationService();
+    std::string opt = argv[3];
+    std::string key = argv[4];
+    std::string val = argv[5];
+    user.replicationService( opt, key, val );
 
     return 0;
 }
